@@ -130,6 +130,10 @@ void thread_yield(void);
 
 /* Put thread in sleep_list and find thread to yield*/
 void thread_sleep(int64_t ticks);
+/* Helper functions */
+void thread_wakeup(int64_t ticks);
+void set_min_wakeup_tick(int64_t ticks);
+int64_t get_min_wakeup_tick(void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func(struct thread *t, void *aux);

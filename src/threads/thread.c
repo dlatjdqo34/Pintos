@@ -27,6 +27,7 @@ static struct list ready_list;
 /* List of processes in THREAD_BLOCKED state, that is, processes
    that are blocked and waiting to wakeup */
 static struct list sleep_list;
+static int64_t min_wakeup_tick;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -309,19 +310,54 @@ void thread_yield(void)
   intr_set_level(old_level);
 }
 
-/* Put thread in sleep_list and find thread to yield*/
+/* if the current thread is not idle thread,
+	change the state of the caller thread to BLOCKED,
+	store the local tick to wake up,
+	update the global tick if necessary,
+	and call schedule().
+  When you manipulate thread list, disable interrupt! */
 void thread_sleep(int64_t ticks)
 {
+  enum intr_level old_level = intr_disable();
   struct thread *cur = thread_current();
-  enum intr_level old_level = intr_get_level();
-  if (cur != idle_thread)
+  if (cur != idle_thread) 
   {
-    old_level = intr_disable();
-    cur->status = THREAD_BLOCKED;
     cur->wakeup_tick = ticks;
-
-    intr_set_level(old_level);
+    set_min_wakeup_tick(ticks);
+    list_push_back(&sleep_list, &cur->elem);
+    thread_block();
   }
+  intr_set_level(old_level);
+}
+
+/* Helper Function
+  Find the thread to wake up from sleep queue and wake up it. */
+void thread_wakeup(int64_t ticks)
+{
+  min_wakeup_tick = INT64_MAX;
+  struct list_elem *e = list_begin(&sleep_list);
+  while (e != list_end(&sleep_list)) 
+  {
+    struct thread *t = list_entry(e, struct thread, elem);
+    if(t->wakeup_tick <= ticks)
+    {
+      e = list_remove(&t->elem);
+      thread_unblock(t);
+    } else {
+      e = list_next(e);
+      set_min_wakeup_tick(t->wakeup_tick);
+    }
+  }
+}
+
+void set_min_wakeup_tick(int64_t ticks)
+{
+  min_wakeup_tick = (min_wakeup_tick > ticks) ? ticks : min_wakeup_tick;
+}
+
+int64_t get_min_wakeup_tick(void) 
+{ 
+  return min_wakeup_tick; 
 }
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
